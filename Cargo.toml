@@ -97,6 +97,7 @@ arrow-flight.workspace = true
 arrow-schema.workspace = true
 parquet.workspace = true
 object_store.workspace = true
+liquid-cache-parquet.workspace = true
 env_logger.workspace = true
 etcd-client.workspace = true
 faststr.workspace = true
@@ -224,7 +225,7 @@ wal = { path = "src/wal" }
 proto = { path = "src/proto" }
 report_server = { path = "src/report_server" }
 aes-siv = "0.7.0"
-ahash = { version = "0.8", features = ["serde"] }
+ahash = { version = "0.8.12", features = ["serde"] }
 actix-web = { version = "4.9", features = ["rustls-0_23"] }
 actix-tls = { version = "3.4", features = [
     "connect",
@@ -265,6 +266,7 @@ arrow-schema = { version = "54.2.1", features = ["serde"] }
 parquet = { version = "54.2.1", features = ["arrow", "async", "object_store"] }
 object_store = { version = "0.11.2", features = ["aws", "azure", "gcp"] }
 sqlparser = { version = "0.54.0", features = ["serde", "visitor"] }
+liquid-cache-parquet = { version = "0.1.0", git = "https://github.com/haohuaijin/liquid-cache", rev = "f44f081e7ed4413b4ca88738675cf65e126ff6ad" }
 dotenv_config = "0.2.2"
 dotenvy = "0.15.7"
 env_logger = "0.10"
