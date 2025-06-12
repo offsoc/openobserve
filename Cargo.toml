@@ -98,6 +98,7 @@ arrow-schema.workspace = true
 parquet.workspace = true
 object_store.workspace = true
 liquid-cache-parquet.workspace = true
+liquid-cache-common.workspace = true
 env_logger.workspace = true
 etcd-client.workspace = true
 faststr.workspace = true
@@ -254,19 +255,20 @@ cityhasher = { version = "0.1", default-features = false }
 collapse = "0.1.2"
 cron = "0.15"
 dashmap = { version = "6.1", features = ["serde"] }
-datafusion = "46.0.0"
-datafusion-proto = "46.0.0"
-datafusion-functions-aggregate-common = "46.0.0"
-datafusion-functions-json = "0.46.0"
+datafusion = "47.0.0"
+datafusion-proto = "47.0.0"
+datafusion-functions-aggregate-common = "47.0.0"
+datafusion-functions-json = "0.47.0"
 expect-test = "1.4"
-arrow = { version = "54.2.1", features = ["ipc_compression", "prettyprint"] }
-arrow-flight = "54.2.1"
-arrow-json = "54.2.1"
-arrow-schema = { version = "54.2.1", features = ["serde"] }
-parquet = { version = "54.2.1", features = ["arrow", "async", "object_store"] }
-object_store = { version = "0.11.2", features = ["aws", "azure", "gcp"] }
-sqlparser = { version = "0.54.0", features = ["serde", "visitor"] }
-liquid-cache-parquet = { version = "0.1.0", git = "https://github.com/haohuaijin/liquid-cache", rev = "f44f081e7ed4413b4ca88738675cf65e126ff6ad" }
+arrow = { version = "55.1.0", features = ["ipc_compression", "prettyprint"] }
+arrow-flight = "55.1.0"
+arrow-json = "55.1.0"
+arrow-schema = { version = "55.1.0", features = ["serde"] }
+parquet = { version = "55.1.0", features = ["arrow", "async", "object_store"] }
+object_store = { version = "0.12.1", features = ["aws", "azure", "gcp"] }
+sqlparser = { version = "0.55.0", features = ["serde", "visitor"] }
+liquid-cache-parquet = { version = "0.1.0", git = "https://github.com/haohuaijin/liquid-cache", rev = "5e19619dbd742b130271f59bdd8fd923b6c2f54b" }
+liquid-cache-common = { version = "0.1.0", git = "https://github.com/haohuaijin/liquid-cache", rev = "5e19619dbd742b130271f59bdd8fd923b6c2f54b" }
 dotenv_config = "0.2.2"
 dotenvy = "0.15.7"
 env_logger = "0.10"

@@ -307,12 +307,7 @@ impl ObjectStoreExt for StorageClientFactory {
             .await
     }
 
-    async fn get_range(
-        &self,
-        account: &str,
-        location: &Path,
-        range: Range<usize>,
-    ) -> Result<Bytes> {
+    async fn get_range(&self, account: &str, location: &Path, range: Range<u64>) -> Result<Bytes> {
         self.get_client_by_name(account)
             .get_range(location, range)
             .await
@@ -322,7 +317,7 @@ impl ObjectStoreExt for StorageClientFactory {
         &self,
         account: &str,
         location: &Path,
-        ranges: &[Range<usize>],
+        ranges: &[Range<u64>],
     ) -> Result<Vec<Bytes>> {
         self.get_client_by_name(account)
             .get_ranges(location, ranges)

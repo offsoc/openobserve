@@ -132,13 +132,14 @@ fn is_aggregate_expression(expr: &Expr) -> bool {
         }
         Expr::Case {
             conditions,
-            results,
+            operand,
             else_result,
             ..
         } => {
             // Check if any part of the CASE expression is an aggregate function
-            conditions.iter().any(is_aggregate_expression)
-                || results.iter().any(is_aggregate_expression)
+            conditions.iter().any(|c| {
+                is_aggregate_expression(&c.condition) || is_aggregate_expression(&c.result)
+            }) || operand.as_ref().is_some_and(|e| is_aggregate_expression(e))
                 || else_result
                     .as_ref()
                     .is_some_and(|e| is_aggregate_expression(e))
@@ -174,7 +175,7 @@ fn has_group_by(query: &Query) -> bool {
 // Check if has distinct
 fn has_distinct(query: &Query) -> bool {
     let mut visitor = DistinctVisitor::new();
-    query.visit(&mut visitor);
+    let _ = query.visit(&mut visitor);
     visitor.has_distinct
 }
 
@@ -246,13 +247,13 @@ fn has_join(query: &Query) -> bool {
 
 fn has_union(query: &Query) -> bool {
     let mut visitor = UnionVisitor::new();
-    query.visit(&mut visitor);
+    let _ = query.visit(&mut visitor);
     visitor.has_union
 }
 
 fn has_subquery(stat: &Statement) -> bool {
     let mut visitor = SubqueryVisitor::new();
-    stat.visit(&mut visitor);
+    let _ = stat.visit(&mut visitor);
     visitor.is_subquery
 }
 
@@ -318,7 +319,7 @@ impl Visitor for SubqueryVisitor {
 
 fn has_timestamp(stat: &Statement) -> bool {
     let mut visitor = TimestampVisitor::new();
-    stat.visit(&mut visitor);
+    let _ = stat.visit(&mut visitor);
     visitor.timestamp_selected
 }
 
@@ -377,7 +378,7 @@ impl Visitor for TimestampVisitor {
 
 fn has_window_functions(stat: &Statement) -> bool {
     let mut visitor = WindowFunctionVisitor::new();
-    stat.visit(&mut visitor);
+    let _ = stat.visit(&mut visitor);
     visitor.has_window_function
 }
 

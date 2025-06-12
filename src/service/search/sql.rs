@@ -42,12 +42,14 @@ use regex::Regex;
 use sqlparser::{
     ast::{
         BinaryOperator, DuplicateTreatment, Expr, Function, FunctionArg, FunctionArgExpr,
-        FunctionArgumentList, FunctionArguments, GroupByExpr, Ident, ObjectName, OrderByExpr,
-        Query, Select, SelectItem, SetExpr, Statement, TableFactor, TableWithJoins, Value,
-        VisitMut, VisitorMut, helpers::attached_token::AttachedToken,
+        FunctionArgumentList, FunctionArguments, GroupByExpr, Ident, ObjectName, ObjectNamePart,
+        OrderByExpr, OrderByKind, Query, Select, SelectFlavor, SelectItem, SetExpr, Statement,
+        TableFactor, TableWithJoins, Value, ValueWithSpan, VisitMut, VisitorMut,
+        helpers::attached_token::AttachedToken,
     },
     dialect::PostgreSqlDialect,
     parser::Parser,
+    tokenizer::Span,
 };
 
 #[cfg(feature = "enterprise")]
@@ -250,7 +252,7 @@ impl Sql {
         // NOTE: only this place modify the sql
         // 11. replace all filter that include DASHBOARD_ALL with true
         let mut remove_dashboard_all_visitor = RemoveDashboardAllVisitor::new();
-        statement.visit(&mut remove_dashboard_all_visitor);
+        let _ = statement.visit(&mut remove_dashboard_all_visitor);
 
         // 12. generate tantivy query
         let mut index_condition = None;
@@ -696,20 +698,26 @@ impl VisitorMut for ColumnVisitor<'_> {
 
     fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<Self::Break> {
         if let Some(order_by) = query.order_by.as_mut() {
-            for order in order_by.exprs.iter_mut() {
-                let mut name_visitor = FieldNameVisitor::new();
-                let _ = order.expr.visit(&mut name_visitor);
-                if name_visitor.field_names.len() == 1 {
-                    let expr_name = name_visitor.field_names.iter().next().unwrap().to_string();
-                    self.order_by.push((
-                        expr_name,
-                        if order.asc.unwrap_or(true) {
-                            OrderBy::Asc
-                        } else {
-                            OrderBy::Desc
-                        },
-                    ));
+            match &mut order_by.kind {
+                OrderByKind::Expressions(exprs) => {
+                    for order in exprs.iter_mut() {
+                        let mut name_visitor = FieldNameVisitor::new();
+                        let _ = order.expr.visit(&mut name_visitor);
+                        if name_visitor.field_names.len() == 1 {
+                            let expr_name =
+                                name_visitor.field_names.iter().next().unwrap().to_string();
+                            self.order_by.push((
+                                expr_name,
+                                if order.options.asc.unwrap_or(true) {
+                                    OrderBy::Asc
+                                } else {
+                                    OrderBy::Desc
+                                },
+                            ));
+                        }
+                    }
                 }
+                _ => {}
             }
         }
         if let sqlparser::ast::SetExpr::Select(select) = query.body.as_mut() {
@@ -768,16 +776,28 @@ impl VisitorMut for ColumnVisitor<'_> {
                 }
             }
         }
-        if let Some(Expr::Value(Value::Number(n, _))) = query.limit.as_ref() {
-            if let Ok(num) = n.to_string().parse::<i64>() {
-                self.limit = Some(num);
+        if let Some(limit) = query.limit.as_ref() {
+            match limit {
+                Expr::Value(ValueWithSpan { value, span: _ }) => {
+                    if let Value::Number(n, _) = value {
+                        if let Ok(num) = n.to_string().parse::<i64>() {
+                            self.limit = Some(num);
+                        }
+                    }
+                }
+                _ => {}
             }
         }
         if let Some(offset) = query.offset.as_ref() {
-            if let Expr::Value(Value::Number(n, _)) = &offset.value {
-                if let Ok(num) = n.to_string().parse::<i64>() {
-                    self.offset = Some(num);
+            match &offset.value {
+                Expr::Value(ValueWithSpan { value, span: _ }) => {
+                    if let Value::Number(n, _) = value {
+                        if let Ok(num) = n.to_string().parse::<i64>() {
+                            self.offset = Some(num);
+                        }
+                    }
                 }
+                _ => {}
             }
         }
         ControlFlow::Continue(())
@@ -1507,7 +1527,7 @@ impl VisitorMut for TrackTotalHitsVisitor {
                 select.sort_by = vec![];
                 select.projection = vec![SelectItem::ExprWithAlias {
                     expr: Expr::Function(Function {
-                        name: ObjectName(vec![Ident::new("count")]),
+                        name: ObjectName(vec![ObjectNamePart::Identifier(Ident::new("count"))]),
                         parameters: FunctionArguments::None,
                         args: FunctionArguments::List(FunctionArgumentList {
                             args: vec![FunctionArg::Unnamed(field_expr)],
@@ -1533,7 +1553,7 @@ impl VisitorMut for TrackTotalHitsVisitor {
                     top_before_distinct: false,
                     projection: vec![SelectItem::ExprWithAlias {
                         expr: Expr::Function(Function {
-                            name: ObjectName(vec![Ident::new("count")]),
+                            name: ObjectName(vec![ObjectNamePart::Identifier(Ident::new("count"))]),
                             parameters: FunctionArguments::None,
                             args: FunctionArguments::List(FunctionArgumentList {
                                 args: vec![FunctionArg::Unnamed(FunctionArgExpr::Wildcard)],
@@ -1549,6 +1569,7 @@ impl VisitorMut for TrackTotalHitsVisitor {
                         alias: Ident::new("zo_sql_num"),
                     }],
                     into: None,
+                    flavor: SelectFlavor::Standard,
                     from: vec![TableWithJoins {
                         relation: TableFactor::Derived {
                             lateral: false,
@@ -1866,12 +1887,14 @@ impl VisitorMut for AddOrderingTermVisitor {
     fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<Self::Break> {
         if query.order_by.is_none() {
             query.order_by = Some(sqlparser::ast::OrderBy {
-                exprs: vec![OrderByExpr {
+                kind: OrderByKind::Expressions(vec![OrderByExpr {
                     expr: Expr::Identifier(Ident::new(self.field.clone())),
-                    asc: Some(self.is_asc),
-                    nulls_first: None,
                     with_fill: None,
-                }],
+                    options: sqlparser::ast::OrderByOptions {
+                        asc: Some(self.is_asc),
+                        nulls_first: None,
+                    },
+                }]),
                 interpolate: None,
             });
         }
@@ -1920,7 +1943,10 @@ impl AddNewFiltersWithAndOperatorVisitor {
             exprs.push(Expr::BinaryOp {
                 left: Box::new(Expr::Identifier(Ident::new(key.to_string()))),
                 op: BinaryOperator::Eq,
-                right: Box::new(Expr::Value(Value::SingleQuotedString(value.to_string()))),
+                right: Box::new(Expr::Value(ValueWithSpan {
+                    value: Value::SingleQuotedString(value.to_string()),
+                    span: Span::empty(),
+                })),
             });
         }
         let exprs = exprs.iter().collect();
@@ -1991,13 +2017,27 @@ impl VisitorMut for RemoveDashboardAllVisitor {
                     | BinaryOperator::Lt,
                 right,
             } => {
-                if let Expr::Value(Value::SingleQuotedString(value)) = left.as_ref() {
+                if let Expr::Value(ValueWithSpan {
+                    value: Value::SingleQuotedString(value),
+                    span: _,
+                }) = left.as_ref()
+                {
                     if value == DASHBOARD_ALL {
-                        *expr = Expr::Value(Value::Boolean(true));
+                        *expr = Expr::Value(ValueWithSpan {
+                            value: Value::Boolean(true),
+                            span: Span::empty(),
+                        });
                     }
-                } else if let Expr::Value(Value::SingleQuotedString(value)) = right.as_ref() {
+                } else if let Expr::Value(ValueWithSpan {
+                    value: Value::SingleQuotedString(value),
+                    span: _,
+                }) = right.as_ref()
+                {
                     if value == DASHBOARD_ALL {
-                        *expr = Expr::Value(Value::Boolean(true));
+                        *expr = Expr::Value(ValueWithSpan {
+                            value: Value::Boolean(true),
+                            span: Span::empty(),
+                        });
                     }
                 }
             }
@@ -2007,13 +2047,27 @@ impl VisitorMut for RemoveDashboardAllVisitor {
                 op: BinaryOperator::NotEq,
                 right,
             } => {
-                if let Expr::Value(Value::SingleQuotedString(value)) = left.as_ref() {
+                if let Expr::Value(ValueWithSpan {
+                    value: Value::SingleQuotedString(value),
+                    span: _,
+                }) = left.as_ref()
+                {
                     if value == DASHBOARD_ALL {
-                        *expr = Expr::Value(Value::Boolean(false));
+                        *expr = Expr::Value(ValueWithSpan {
+                            value: Value::Boolean(false),
+                            span: Span::empty(),
+                        });
                     }
-                } else if let Expr::Value(Value::SingleQuotedString(value)) = right.as_ref() {
+                } else if let Expr::Value(ValueWithSpan {
+                    value: Value::SingleQuotedString(value),
+                    span: _,
+                }) = right.as_ref()
+                {
                     if value == DASHBOARD_ALL {
-                        *expr = Expr::Value(Value::Boolean(false));
+                        *expr = Expr::Value(ValueWithSpan {
+                            value: Value::Boolean(false),
+                            span: Span::empty(),
+                        });
                     }
                 }
             }
@@ -2028,9 +2082,16 @@ impl VisitorMut for RemoveDashboardAllVisitor {
                 negated: false,
                 ..
             } => {
-                if let Expr::Value(Value::SingleQuotedString(value)) = pattern.as_ref() {
+                if let Expr::Value(ValueWithSpan {
+                    value: Value::SingleQuotedString(value),
+                    span: _,
+                }) = pattern.as_ref()
+                {
                     if value == DASHBOARD_ALL {
-                        *expr = Expr::Value(Value::Boolean(true));
+                        *expr = Expr::Value(ValueWithSpan {
+                            value: Value::Boolean(true),
+                            span: Span::empty(),
+                        });
                     }
                 }
             }
@@ -2045,18 +2106,32 @@ impl VisitorMut for RemoveDashboardAllVisitor {
                 negated: true,
                 ..
             } => {
-                if let Expr::Value(Value::SingleQuotedString(value)) = pattern.as_ref() {
+                if let Expr::Value(ValueWithSpan {
+                    value: Value::SingleQuotedString(value),
+                    span: _,
+                }) = pattern.as_ref()
+                {
                     if value == DASHBOARD_ALL {
-                        *expr = Expr::Value(Value::Boolean(false));
+                        *expr = Expr::Value(ValueWithSpan {
+                            value: Value::Boolean(false),
+                            span: Span::empty(),
+                        });
                     }
                 }
             }
             // In list
             Expr::InList { list, negated, .. } if !(*negated) => {
                 for item in list.iter() {
-                    if let Expr::Value(Value::SingleQuotedString(value)) = item {
+                    if let Expr::Value(ValueWithSpan {
+                        value: Value::SingleQuotedString(value),
+                        span: _,
+                    }) = item
+                    {
                         if value == DASHBOARD_ALL {
-                            *expr = Expr::Value(Value::Boolean(true));
+                            *expr = Expr::Value(ValueWithSpan {
+                                value: Value::Boolean(true),
+                                span: Span::empty(),
+                            });
                             break;
                         }
                     }
@@ -2065,9 +2140,16 @@ impl VisitorMut for RemoveDashboardAllVisitor {
             // Not in list
             Expr::InList { list, negated, .. } if *negated => {
                 for item in list.iter() {
-                    if let Expr::Value(Value::SingleQuotedString(value)) = item {
+                    if let Expr::Value(ValueWithSpan {
+                        value: Value::SingleQuotedString(value),
+                        span: _,
+                    }) = item
+                    {
                         if value == DASHBOARD_ALL {
-                            *expr = Expr::Value(Value::Boolean(false));
+                            *expr = Expr::Value(ValueWithSpan {
+                                value: Value::Boolean(false),
+                                span: Span::empty(),
+                            });
                             break;
                         }
                     }
@@ -2795,7 +2877,7 @@ mod tests {
             .pop()
             .unwrap();
         let mut remove_dashboard_all_visitor = RemoveDashboardAllVisitor::new();
-        statement.visit(&mut remove_dashboard_all_visitor);
+        let _ = statement.visit(&mut remove_dashboard_all_visitor);
         let expected = "SELECT * FROM t WHERE true";
         assert_eq!(statement.to_string(), expected);
     }
@@ -2808,7 +2890,7 @@ mod tests {
             .pop()
             .unwrap();
         let mut remove_dashboard_all_visitor = RemoveDashboardAllVisitor::new();
-        statement.visit(&mut remove_dashboard_all_visitor);
+        let _ = statement.visit(&mut remove_dashboard_all_visitor);
         let expected = "SELECT * FROM t WHERE true";
         assert_eq!(statement.to_string(), expected);
     }
@@ -2821,7 +2903,7 @@ mod tests {
             .pop()
             .unwrap();
         let mut remove_dashboard_all_visitor = RemoveDashboardAllVisitor::new();
-        statement.visit(&mut remove_dashboard_all_visitor);
+        let _ = statement.visit(&mut remove_dashboard_all_visitor);
         let expected = "SELECT * FROM t WHERE false";
         assert_eq!(statement.to_string(), expected);
     }
@@ -2834,7 +2916,7 @@ mod tests {
             .pop()
             .unwrap();
         let mut remove_dashboard_all_visitor = RemoveDashboardAllVisitor::new();
-        statement.visit(&mut remove_dashboard_all_visitor);
+        let _ = statement.visit(&mut remove_dashboard_all_visitor);
         let expected = "SELECT * FROM t WHERE false AND field2 = 'value2'";
         assert_eq!(statement.to_string(), expected);
     }
@@ -2848,7 +2930,7 @@ mod tests {
             .pop()
             .unwrap();
         let mut remove_dashboard_all_visitor = RemoveDashboardAllVisitor::new();
-        statement.visit(&mut remove_dashboard_all_visitor);
+        let _ = statement.visit(&mut remove_dashboard_all_visitor);
         let expected = "SELECT * FROM t WHERE true AND (true OR true)";
         assert_eq!(statement.to_string(), expected);
     }
@@ -2862,7 +2944,7 @@ mod tests {
             .pop()
             .unwrap();
         let mut remove_dashboard_all_visitor = RemoveDashboardAllVisitor::new();
-        statement.visit(&mut remove_dashboard_all_visitor);
+        let _ = statement.visit(&mut remove_dashboard_all_visitor);
         let expected = "SELECT * FROM t WHERE true AND false";
         assert_eq!(statement.to_string(), expected);
     }
@@ -2876,7 +2958,7 @@ mod tests {
             .pop()
             .unwrap();
         let mut remove_dashboard_all_visitor = RemoveDashboardAllVisitor::new();
-        statement.visit(&mut remove_dashboard_all_visitor);
+        let _ = statement.visit(&mut remove_dashboard_all_visitor);
         let expected = "SELECT * FROM t WHERE true AND false AND field3 = 'value3'";
         assert_eq!(statement.to_string(), expected);
     }

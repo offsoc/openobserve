@@ -151,7 +151,9 @@ impl NewEmptyExec {
 impl DisplayAs for NewEmptyExec {
     fn fmt_as(&self, t: DisplayFormatType, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match t {
-            DisplayFormatType::Default | DisplayFormatType::Verbose => {
+            DisplayFormatType::Default
+            | DisplayFormatType::Verbose
+            | DisplayFormatType::TreeRender => {
                 let name_string = format!("name={:?}", self.name);
                 let projection_string = format!(
                     ", projection={:?}",

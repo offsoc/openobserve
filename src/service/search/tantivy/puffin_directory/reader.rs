@@ -117,6 +117,10 @@ impl FileHandle for PuffinSliceHandle {
         if byte_range.is_empty() {
             return Ok(OwnedBytes::empty());
         }
+        let byte_range = Range {
+            start: byte_range.start as u64,
+            end: byte_range.end as u64,
+        };
         let data = self
             .source
             .read_blob_bytes(&self.metadata, Some(byte_range.clone()))
@@ -307,7 +311,7 @@ mod tests {
         object_store::ObjectMeta {
             location: file_name.into(),
             last_modified: chrono::Utc::now(),
-            size,
+            size: size as u64,
             e_tag: None,
             version: None,
         }

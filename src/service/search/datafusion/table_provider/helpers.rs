@@ -151,6 +151,7 @@ pub async fn list_files<'a>(
 }
 
 /// Partition the list of files into `n` groups
+#[allow(unused)]
 pub fn split_files(
     mut partitioned_files: Vec<PartitionedFile>,
     n: usize,

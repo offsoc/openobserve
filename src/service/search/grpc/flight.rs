@@ -385,6 +385,8 @@ pub async fn search(
         physical_plan = Arc::new(UnionExec::new(vec![physical_plan, tantivy_exec as _]));
     }
 
+    // replace with liquid-cache
+
     log::info!(
         "{}",
         search_inspector_fields(

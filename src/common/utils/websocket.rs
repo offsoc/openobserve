@@ -28,6 +28,7 @@ use sqlparser::{
     ast::{Expr, FunctionArguments, Statement, visit_statements_mut},
     dialect::PostgreSqlDialect,
     parser::Parser,
+    tokenizer::Span,
 };
 
 #[inline(always)]
@@ -119,7 +120,10 @@ fn update_histogram_in_expr(expr: &mut Expr, histogram_interval: i64) {
                     let interval_value = format!("{} seconds", histogram_interval);
                     list.args.push(sqlparser::ast::FunctionArg::Unnamed(
                         sqlparser::ast::FunctionArgExpr::Expr(Expr::Value(
-                            sqlparser::ast::Value::SingleQuotedString(interval_value),
+                            sqlparser::ast::ValueWithSpan {
+                                value: sqlparser::ast::Value::SingleQuotedString(interval_value),
+                                span: Span::empty(),
+                            },
                         )),
                     ));
                 }
