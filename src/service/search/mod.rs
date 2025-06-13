@@ -13,14 +13,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::{cmp::max, sync::Arc};
+use std::{cmp::max, path::PathBuf, sync::Arc};
 
 use arrow::array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
 use cache::cacher::get_ts_col_order_by;
 use chrono::{Duration, Utc};
 use config::{
-    TIMESTAMP_COL_NAME,
+    PARQUET_BATCH_SIZE, TIMESTAMP_COL_NAME,
     cluster::LOCAL_NODE,
     get_config, ider,
     meta::{
@@ -46,6 +46,8 @@ use infra::{
     errors::{Error, ErrorCodes},
     schema::{get_stream_setting_index_fields, unwrap_stream_settings},
 };
+use liquid_cache_common::LiquidCacheMode;
+use liquid_cache_parquet::{LiquidCache, policies};
 use once_cell::sync::Lazy;
 use opentelemetry::trace::TraceContextExt;
 use proto::cluster_rpc::{self, SearchQuery};
@@ -99,6 +101,18 @@ pub static DATAFUSION_RUNTIME: Lazy<Runtime> = Lazy::new(|| {
         .enable_all()
         .build()
         .unwrap()
+});
+
+pub static LIQUID_CACHE: Lazy<Arc<LiquidCache>> = Lazy::new(|| {
+    Arc::new(LiquidCache::new(
+        PARQUET_BATCH_SIZE,
+        1024 * 1024 * 1024 * 1024,
+        PathBuf::from("/tmp/liquid-cache"),
+        LiquidCacheMode::Liquid {
+            transcode_in_background: true,
+        },
+        Box::new(policies::LruPolicy::new()),
+    ))
 });
 
 // Please note: `query_fn` which is the vrl needs to be base64::decoded

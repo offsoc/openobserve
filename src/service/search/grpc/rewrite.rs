@@ -22,13 +22,13 @@ pub struct InProcessRewriter {
 impl InProcessRewriter {
     #[allow(dead_code)]
     /// Create an optimizer with an existing cache instance
-    fn with_cache(cache: LiquidCacheRef) -> Self {
+    pub fn with_cache(cache: LiquidCacheRef) -> Self {
         Self { cache }
     }
 
     /// Rewrite a data source plan to use liquid cache
     #[allow(dead_code)]
-    fn rewrite_data_source_plan(&self, plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
+    pub fn rewrite_data_source_plan(&self, plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
         let cache_mode = self.cache.cache_mode();
 
         let rewritten = plan
