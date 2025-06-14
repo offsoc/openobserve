@@ -124,7 +124,7 @@ impl ObjectStoreExt for CacheFS {
         location: &Path,
         options: GetOptions,
     ) -> Result<GetResult> {
-        log::warn!("OOPS: please check cache:storage:get_opts: {:?}", location);
+        // log::warn!("OOPS: please check cache:storage:get_opts: {:?}", location);
         let path = location.to_string();
         if let Ok(data) = file_data::get_opts(account, &path, None, false).await {
             let meta = ObjectMeta {

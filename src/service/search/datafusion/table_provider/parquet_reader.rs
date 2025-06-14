@@ -99,7 +99,10 @@ impl ParquetFileReaderFactory for NewParquetFileReaderFactory {
         let file_metrics =
             ParquetFileMetrics::new(partition_index, file_meta.location().as_ref(), metrics);
         let store = Arc::clone(&self.store);
-        let mut inner = ParquetObjectReader::new(store, file_meta.location().clone());
+        // the FileMeta is from PartitionFile, so we can know the file size
+        // also we can don't set the file size, the ParquetObjectReader will get the file size from the object store use get_opts()
+        let mut inner = ParquetObjectReader::new(store, file_meta.object_meta.location)
+            .with_file_size(file_meta.object_meta.size);
 
         if let Some(hint) = metadata_size_hint {
             inner = inner.with_footer_size_hint(hint);
