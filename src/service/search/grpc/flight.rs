@@ -42,6 +42,7 @@ use infra::{
     },
 };
 use itertools::Itertools;
+use liquid_cache_parquet::rewrite_data_source_plan;
 use proto::cluster_rpc;
 use rayon::slice::ParallelSliceMut;
 
@@ -59,7 +60,6 @@ use crate::service::{
             plan::tantivy_count_exec::TantivyOptimizeExec,
             table_provider::uniontable::NewUnionTable,
         },
-        grpc::rewrite::InProcessRewriter,
         index::IndexCondition,
         inspector::{SearchInspectorFieldsBuilder, search_inspector_fields},
         match_file,
@@ -388,8 +388,7 @@ pub async fn search(
     }
 
     // replace with liquid-cache
-    let physical_plan =
-        InProcessRewriter::with_cache(LIQUID_CACHE.clone()).rewrite_data_source_plan(physical_plan);
+    let physical_plan = rewrite_data_source_plan(physical_plan, &LIQUID_CACHE);
 
     log::info!(
         "{}",

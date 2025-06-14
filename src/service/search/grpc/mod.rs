@@ -23,7 +23,6 @@ use config::{
 use infra::errors::{Error, Result};
 
 pub mod flight;
-pub(crate) mod rewrite;
 pub mod storage;
 pub mod wal;
 
